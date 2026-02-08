@@ -1,0 +1,93 @@
+# DeleverageSentinel — Configuration
+# ====================================
+# All thresholds are tuneable. Defaults calibrated against 2018–2025 data.
+#
+# Theory: The Homogeneity Threshold (Gething 2026) predicts that when
+# cross-asset correlations spike, behavioural diversity collapses and
+# systemic deleveraging becomes likely. HOMOGENEITY_SPIKE carries the
+# highest weight (32%) for this reason.
+
+feeds:
+  fred:
+    api_key_env: FRED_API_KEY    # env var name (get free key at fred.stlouisfed.org)
+    series:
+      HY_OAS:  BAMLH0A0HYM2     # ICE BofA US High Yield OAS
+      CCC_OAS: BAMLH0A3HYC      # ICE BofA CCC & Lower OAS
+      SP500:   SP500             # S&P 500
+      VIX:     VIXCLS            # CBOE Volatility Index
+      DXY:     DTWEXBGS          # Trade-Weighted US Dollar Index
+      GBPUSD:  DEXUSUK           # GBP/USD (free FRED — replaces exchangerate.host)
+
+  boe:
+    csv_url_template: >-
+      https://www.bankofengland.co.uk/boeapps/database/_iadb-fromshowcolumns.asp?CodeVer=new&xml.x=yes&Datefrom={date_from}&Dateto={date_to}&SeriesCodes={series_codes}&UsingCodes=Y&CSVF=TN&VPD=Y&VFD=N&VUD=A
+    series_code: LPMVYVA         # UK mortgage approvals
+
+  # Legacy FX fallback (only used if GBPUSD missing from FRED series above)
+  # WARNING: exchangerate.host free tier is paywalled since mid-2024
+  fx:
+    timeseries_url: "https://api.exchangerate.host/timeseries"
+    base: GBP
+    quote: USD
+    fetch_days: 90
+
+  # Offline mode: local CSVs (columns: date,value)
+  offline_csv:
+    hy_oas:       data/hy_oas.csv
+    ccc_oas:      data/ccc_oas.csv
+    uk_approvals: data/uk_approvals.csv
+    gbpusd:       data/gbpusd.csv
+    sp500:        data/sp500.csv
+    vix:          data/vix.csv
+    dxy:          data/dxy.csv
+
+lookback:
+  fetch_days: 540              # history to fetch (corr window + buffers)
+  jump_days: 30                # window for spread-jump signals
+  corr_window_days: 120        # rolling correlation window
+  uk_compare_months: 3         # UK approvals comparison period
+  uk_fetch_months: 24          # BoE data lookback
+
+thresholds:
+  hy_oas_jump_30d_bps: 100     # HY OAS widens ≥ 100 bps in 30 d
+  ccc_oas_level_pct: 10.0      # CCC OAS absolute level ≥ 10%
+  tail_divergence_30d_bps: 100 # CCC−HY spread widens ≥ 100 bps in 30 d
+  uk_approvals_drop_3m_pct: -7.5
+  gbpusd_drop_30d_pct: -3.0
+  corr_spike_level_abs: 0.75   # |ρ| threshold per pair
+  corr_spike_count: 2          # minimum spiking pairs to trigger
+
+# Signal weights (sum ≤ 100 for interpretable scoring)
+weights:
+  HY_OAS_JUMP:       18
+  CCC_OAS_HIGH:      12
+  TAIL_DIVERGENCE:   18
+  UK_APPROVALS_DOWN: 12
+  GBP_WEAK:           8
+  HOMOGENEITY_SPIKE: 32
+
+bands:
+  GREEN:  [0, 24]
+  AMBER:  [25, 49]
+  RED:    [50, 74]
+  BLACK:  [75, 100]
+
+output:
+  latest_json:    out/latest.json
+  history_csv:    out/history.csv
+  dashboard_html: out/index.html
+  write_dashboard: true
+
+alerting:
+  alert_on_regimes: [RED, BLACK]
+  telegram:
+    enabled: false
+    token_env: TELEGRAM_BOT_TOKEN
+    chat_id_env: TELEGRAM_CHAT_ID
+  email:
+    enabled: false
+    host_env: SMTP_HOST
+    port_env: SMTP_PORT
+    user_env: SMTP_USER
+    pass_env: SMTP_PASS
+    to_env:   ALERT_EMAIL_TO
